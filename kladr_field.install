@@ -1,0 +1,33 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the kladr field module.
+ */
+
+/**
+ * Implements hook_field_schema().
+ */
+function kladr_field_field_schema($field) {
+
+  $columns = array();
+  foreach (kladr_field_subfields() as $key => $label) {
+    if (!empty($field['settings']['types'][$key])) {
+      $columns[$key] = array(
+        'type' => 'varchar',
+        // Is that enough?
+        'length' => 255,
+        'not null' => FALSE,
+      );
+    }
+  }
+  return array('columns' => $columns);
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function kladr_field_uninstall() {
+  variable_del('kladr_field_token');
+  variable_del('kladr_field_key');
+}

@@ -1,0 +1,6 @@
+name = Kladr field
+description = Integration with kladr-api.ru
+core = 7.x
+package = fields
+configure = admin/config/system/kladr
+dependencies[] = jquery_update

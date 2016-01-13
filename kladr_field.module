@@ -1,0 +1,223 @@
+<?php
+
+/**
+ * @file
+ * Primary hooks for kladr_field module.
+ */
+
+/**
+ * Implements hook_theme().
+ */
+function kladr_field_theme() {
+  $items['kladr_field'] = array(
+    'render element' => 'element',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_library().
+ */
+function kladr_field_library() {
+  // TODO: Move this plugin to sites/all/libraries directory.
+  $jquery_kladr_path = drupal_get_path('module', 'kladr_field') . '/jquery.kladr';
+
+  $libraries['jquery.kladr'] = array(
+    'title' => 'jQuery kladr',
+    'website' => 'http://kladr-api.ru/',
+    'version' => 'dev',
+    'js' => array(
+      $jquery_kladr_path . '/jquery.kladr.min.js' => array(),
+    ),
+    'css' => array(
+      $jquery_kladr_path . '/jquery.kladr.min.css' => array(
+        'type' => 'file',
+        'media' => 'screen',
+      ),
+    ),
+  );
+  return $libraries;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function kladr_field_menu() {
+
+  $items['admin/config/system/kladr'] = array(
+    'title' => 'Kladr API',
+    'description' => 'Configure Kladr API access',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('kladr_field_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'kladr_field.admin.inc',
+  );
+
+  return $items;
+
+}
+
+/**
+ * Implements hook_field_info().
+ */
+function kladr_field_field_info() {
+  return array(
+    'kladr_field' => array(
+      'label' => t('Address (kladr)'),
+      'description' => t('Postal address classified by the RF Federal Tax Service'),
+      'default_widget' => 'kladr_field',
+      'default_formatter' => 'kladr_field',
+      'settings' => array(
+        'types' => array(
+          'region', 'city', 'street', 'building', 'flat',
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_settings_form().
+ */
+function kladr_field_field_settings_form($field, $instance, $has_data) {
+
+  $form['types'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Address segments'),
+    '#options' => kladr_field_subfields(),
+    '#default_value' => $field['settings']['types'],
+    '#required' => TRUE,
+
+  );
+
+  return $form;
+}
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function kladr_field_field_widget_info() {
+  $widgets['kladr_field'] = array(
+    'label' => t('Address (kladr)'),
+    'field types' => array('kladr_field'),
+  );
+  return $widgets;
+}
+
+/**
+ * Implements hook_field_is_empty().
+ */
+function kladr_field_field_is_empty($item, $field) {
+  return !implode($item);
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function kladr_field_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+
+  $subfields = kladr_field_subfields();
+  foreach ($subfields as $key => $label) {
+    if ($field['settings']['types'][$key]) {
+      $element[$key] = array(
+        '#type' => 'textfield',
+        '#title' => $label,
+        '#attributes' => array(
+          'class' => array("kladr-$key-subfield"),
+          'data-type' => $key,
+        ),
+        '#default_value' => isset($items[$delta][$key]) ? $items[$delta][$key] : '',
+        '#required' => $instance['required'],
+      );
+    }
+  }
+  $element['#theme_wrappers'][] = 'fieldset';
+  $element['#attributes']['class'][] = 'kladr-field-widget-item';
+
+  // theme_fieldset() doesn't handle '#collapsible'
+  // and  '#collapsed' arguments as claimed.
+  // see http://drupal.org/node/1099132
+  $element['#attached']['js'][] = 'misc/form.js';
+  $element['#attached']['js'][] = 'misc/collapse.js';
+  $element['#attributes']['class'][] = 'collapsible';
+
+  $element['#attached']['library'][] = array('kladr_field', 'jquery.kladr');
+  $element['#attached']['js'][] = drupal_get_path('module', 'kladr_field') . '/kladr_field.js';
+
+  $kladr_access_settings = array(
+    'token' => variable_get('kladr_field_token'),
+    'key' => variable_get('kladr_field_key'),
+  );
+  $element['#attached']['js'][] = array(
+    'data' => array('kladr_field' => $kladr_access_settings),
+    'type' => 'setting',
+  );
+  return $element;
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function kladr_field_field_formatter_info() {
+  return array(
+    'kladr_field' => array(
+      'label' => t('Default'),
+      'field types' => array('kladr_field'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function kladr_field_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+
+  if (!$items) {
+    return;
+  }
+
+  $element = array();
+  foreach ($items as $delta => $item) {
+    $element[$delta] = array(
+      '#theme' => 'kladr_field',
+      '#item' => $item,
+    );
+  }
+
+  return $element;
+}
+
+/**
+ * Implements theme_kladr_field().
+ */
+function theme_kladr_field($vars) {
+  $output = '<div class="kladr-field">';
+  $subfields = kladr_field_subfields();
+  foreach ($vars['element']['#item'] as $key => $value) {
+    if ($value) {
+      $output .= '<div class="kladr-field-item container-inline">';
+      $output .= '<div class="kladr-field-label">' . $subfields[$key] . ': </div>';
+      $output .= '<div class="kladr-field-content">' . $value . '</div>';
+      $output .= '</div>';
+    }
+  }
+
+  $output .= '</div>';
+  return $output;
+}
+
+/**
+ * Address subfields.
+ */
+function kladr_field_subfields() {
+  $subfields = array(
+    'region' => t('Region'),
+    'district' => t('Distinct'),
+    'city' => t('City'),
+    'street' => t('Street'),
+    'building' => t('Building'),
+    'flat' => t('Flat'),
+  );
+
+  return $subfields;
+}
